@@ -220,6 +220,20 @@ $$
 
 ⚠️ **Data Leakage 방지:** Scaler를 전체 데이터에 미리 fit하면 Validation 정보가 새어 들어갑니다. 따라서 `make_pipeline`으로 묶어 **각 Fold의 train 부분에서만 fit** 되도록 구성했습니다.
 
+```python
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+model = make_pipeline(
+    StandardScaler(),
+    SVR(kernel="rbf", C=10)
+)
+
+model.fit(X_train, y_train)
+y_pred = model.predict(X_test)
+```
+
+
 ---
 
 ## 7. Target Transformation
