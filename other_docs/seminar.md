@@ -239,6 +239,7 @@ SVR은 Feature의 Scale뿐만 아니라 **Target Scale**의 영향도 받을 수
 변환 후     -5.2   -1.28  -0.52   0.0   +0.52  +1.28  +5.2
             └─ 양끝은 크게 벌어짐 ─┘ └ 중앙은 촘촘하게 압축 ┘
 ```
+<img src="../assets/quantile_transform.png" width="600">
 
 ### (2) 무슨 효과가 있었을까
 
