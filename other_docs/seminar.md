@@ -194,7 +194,7 @@ df['working_category'] = df['working_category'].map({
 | 민감 | 신경망(MLP), 경사하강 기반 회귀 | 스케일이 제각각이면 손실 곡면이 길쭉해져 **수렴이 느리고 불안정** |
 | **둔감** | Decision Tree, RandomForest, XGBoost, LightGBM | 분할 기준이 `x > t` 형태의 **순서 비교**뿐이라 단위 변환에 불변 |
 
-이번에 선택한 **RBF SVR은 위 표에서 가장 민감한 부류**입니다. `age`(20-80)와 `cholesterol`(150-300)이 섞여 있으면 커널 거리가 사실상 콜레스테롤 한 변수에 의해 결정됩니다. 그래서 Scaling은 선택이 아니라 **성능을 좌우하는 필수 단계**였습니다.
+이번에 선택한 **RBF SVR은 위 표에서 가장 민감한 부류**입니다. `age`(20-80)와 `cholesterol`(150-300)이 섞여 있으면 스케일이 큰 변수가 거리 계산에 더 큰 영향을 줄 수 있다. 그래서 Scaling은 선택이 아니라 **성능을 좌우하는 필수 단계**였습니다.
 
 ### (2) 어떤 Scaler를 쓸 것인가
 
@@ -222,14 +222,17 @@ $$
 
 ---
 
-## 7. Target Transformation — 균등분포 Target을 정규분포로
+## 7. Target Transformation
 
-SVR은 Feature의 Scale뿐만 아니라 Target Scale의 영향도 받을 수 있습니다. 특히 SVR의 epsilon, C와 같은 Hyperparameter는 Target의 값 크기와 함께 영향을 받기 때문에, Target을 다른 형태로 변환했을 때 성능이 달라지는지 실험했습니다.
+SVR은 Feature의 Scale뿐만 아니라 **Target Scale**의 영향도 받을 수 있습니다.  
+특히 SVR의 epsilon과 C는 Target 값의 크기와 함께 해석되기 때문에, Target의 표현 방식을 바꾸었을 때 성능이 달라지는지 실험했습니다.
+이번 데이터의 stress_score는 0~1 범위의 연속형 값이었고, 분포는 이미 균등분포에 가까웠습니다. 따라서 왜도가 큰 Target을 보정하기 위한 목적은 아니었습니다.
 
-
-### (1) 그러면 균등분포 → 정규분포 변환은 무엇을 바꾸는가
+### (1) Quantile Transformation
 
 `QuantileTransformer(output_distribution="normal")`는 **순위(rank)를 보존한 채 값의 간격을 재배치**하는 변환입니다.
+즉, Target의 순서는 유지하면서 값의 간격을 정규분포 형태로 재배치합니다.
+
 ```
 원본(균등)   0.0    0.1    0.3    0.5    0.7    0.9    1.0
                 ↓  Quantile → normal  ↓
@@ -237,17 +240,20 @@ SVR은 Feature의 Scale뿐만 아니라 Target Scale의 영향도 받을 수 있
             └─ 양끝은 크게 벌어짐 ─┘ └ 중앙은 촘촘하게 압축 ┘
 ```
 
-1. **중앙부는 압축되고, 양 끝은 크게 늘어납니다.** 스트레스가 매우 낮거나(0 근처) 매우 높은(1 근처) 샘플들이 변환 공간에서 서로 멀어져, **모델이 극단 구간을 구분하는 데 더 큰 손실 가중치**를 받습니다.
+### (2) 무슨 효과가 있었을까
 
-2. **경계 포화(boundary saturation) 문제가 완화됩니다.** 타깃이 [0, 1]로 잘려 있는데 SVR의 출력은 제한이 없어 음수나 1 초과를 예측할 수 있고, 경계 근처 예측이 안쪽으로 수축되는 경향이 있습니다. 정규 공간에서는 경계가 ±∞ 쪽으로 밀려나 이 압박이 줄어듭니다.
+1. **중앙부는 상대적으로 압축되고, 양 끝은 더 넓게 배치됩니다.** 
 
-**이론만으로는 결론이 안 나므로 A/B로 측정했습니다.**
+원본 Target은 0~1 사이에 비교적 균등하게 분포하지만, 정규분포로 변환하면 중앙값 주변은 가까워지고 양 끝에 위치한 값들은 서로 더 멀어집니다.
+따라서 SVR은 원본 Target과는 다른 거리 구조를 가진 Target 공간에서 학습하게 됩니다.
 
-### (2) 비교 실험 결과
+### (3) 비교 실험 결과
 | 조건 | 구성 | 결과 |
 |---|---|---|
 | A. 원본 Target | `RobustScaler → SVR(rbf)` | 기준선 |
 | B. Quantile 변환 Target | `RobustScaler → QuantileTransformer(normal) → SVR(rbf)` | **CV MAE 개선 → 채택** ✅ |
+
+실험 결과 Quantile Transformation을 적용했을 때 Validation MAE가 개선되어 최종 모델에 채택했습니다.
 
 ```python
 from sklearn.compose import TransformedTargetRegressor
