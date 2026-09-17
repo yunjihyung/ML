@@ -1,5 +1,5 @@
 # Generalization under Feature Distribution Shift in Long Data
-Rev. 1 | Created: 2026-09-16 | Updated: 2026-09-16 14:46 KST
+Rev. 2 | Created: 2026-09-16 | Updated: 2026-09-17 14:57 KST
 
 ## 1. Scope
 
@@ -109,11 +109,7 @@ stats = df.groupby("time_bucket")[features].agg(["mean", "std"])
 
 ### 3.4 Mitigation
 
-Temporal Shift에 대한 mitigation의 핵심은 **현재 Test distribution을 더 잘 대표하는 data에 학습과 평가의 비중을 높이는 것**이다.
-
-#### Time-aware Validation
-
-Random split은 과거와 미래 sample을 섞기 때문에 temporal shift가 존재할 때 실제 배포 상황보다 쉬운 validation을 만들 수 있다. 시간 순서를 유지하는 holdout, expanding-window validation 또는 rolling-window validation을 사용해 과거로 학습하고 미래를 평가하는 구조를 유지해야 한다. `TimeSeriesSplit`도 이러한 목적의 forward split을 제공한다 [[6](#ref-6)].
+Temporal Shift에 대한 mitigation은 현재 Test distribution을 더 잘 대표하는 data의 비중을 높이거나, distribution 변화에 대한 model의 민감도를 줄이는 방향으로 접근할 수 있다.  
 
 #### Recent-window Training
 
@@ -122,10 +118,6 @@ Random split은 과거와 미래 sample을 섞기 때문에 temporal shift가 �
 #### Time-decay Weighting
 
 모든 historical sample을 제거하는 대신 최근 sample에 더 높은 weight를 부여한다. Distribution이 점진적으로 변하는 상황에서 오래된 data의 정보는 유지하면서 현재 distribution에 더 큰 비중을 둘 수 있다.
-
-#### Retraining and Regime Update
-
-Distribution 변화가 지속되거나 abrupt change가 확인되는 경우, 새로운 data를 포함하여 model을 갱신한다. 일정 주기의 periodic retraining과 shift detection을 trigger로 사용하는 event-driven retraining을 구분할 수 있다. Abrupt change 이후 이전 regime의 대표성이 크게 낮아졌다면 change point 이후의 data를 중심으로 다시 학습하는 방법도 고려할 수 있다 [[4](#ref-4)].
 
 #### Importance Weighting
 
@@ -137,11 +129,28 @@ $$
 
 Importance weighting은 Train support 안에 Test sample이 충분히 존재할 때 의미가 있다. Test가 Train에서 관측되지 않은 영역으로 이동한 경우에는 density ratio를 안정적으로 추정할 수 없으므로 Support / Range Shift를 먼저 확인해야 한다.
 
+
+#### Robust Feature Representation  
+
+Continuous feature를 적절한 interval로 discretization/binning하면 작은 fluctuation이나 noise에 대한 model sensitivity를 낮출 수 있다. 이는 model variance와 overfitting을 완화하는 데 도움이 될 수 있지만, Train-Test distribution shift 또는 extrapolation 자체를 제거하는 방법은 아니다.
+
+```python
+from sklearn.preprocessing import KBinsDiscretizer
+
+binner = KBinsDiscretizer(
+    n_bins=5,
+    encode="ordinal",
+    strategy="quantile"
+)
+
+X_train_binned = binner.fit_transform(X_train)
+X_test_binned = binner.transform(X_test)
+```
+
+
 ### 3.5 Limitations
 
-Scaling만으로 Temporal Shift 자체가 해결되는 것은 아니다. 예를 들어 Train mean과 standard deviation으로 `StandardScaler`를 적용하면 scale은 변하지만 Train과 Test의 상대적 distribution 차이는 남는다. 반대로 Test 전체의 mean과 standard deviation을 이용하여 별도로 정규화하면 실제 추론 시점에 사용할 수 없는 미래 정보를 사용할 가능성이 있으므로 validation leakage를 검토해야 한다.
-
-또한 expanding window가 항상 rolling window보다 우수한 것도 아니다. 과거 data가 현재에도 유효하다면 expanding window가 안정적인 반면, distribution이 지속적으로 이동하면 오래된 sample이 최근 pattern을 희석할 수 있다. 따라서 두 방법의 선택 자체도 time-aware validation 대상으로 두는 것이 적절하다.
+expanding window가 항상 rolling window보다 우수한 것도 아니다. 과거 data가 현재에도 유효하다면 expanding window가 안정적인 반면, distribution이 지속적으로 이동하면 오래된 sample이 최근 pattern을 희석할 수 있다. 따라서 두 방법의 선택 자체도 time-aware validation 대상으로 두는 것이 적절하다.
 
 ## 4. Support / Range Shift
 
@@ -202,7 +211,7 @@ out_of_range_rate = out_of_range.mean().sort_values(ascending=False)
 
 ### 4.4 Mitigation
 
-Support / Range Shift는 Temporal Shift보다 model 내부 기법만으로 해결하기 어렵다. 특히 Test가 Train support 밖에 있다면, 가장 직접적인 대응은 해당 영역의 training data를 확보하는 것이다.
+Support / Range Shift는 Temporal Shift보다 model 내부 기법만으로 해결하기 어렵다. 특히 Test가 Train support 밖에 있다면, 가장 직접적인 대응은 해당 영역의 training data를 확보하는 것이다. 차선책은 overlap 영역의 중요도를 조정하거나, Train support 밖의 prediction을 별도로 관리하는 방향으로 나눌 수 있다.
 
 #### Training Coverage Expansion
 
@@ -212,13 +221,19 @@ Support / Range Shift는 Temporal Shift보다 model 내부 기법만으로 해�
 
 Train support에서 지나치게 먼 sample을 탐지하고 prediction과 함께 reliability flag를 제공하거나, 별도의 fallback rule을 적용한다. 이는 extrapolation을 해결하는 방법이 아니라 **위험한 prediction을 식별하는 방법**이다.
 
-#### Overlap-aware Weighting
-
-Train과 Test가 충분히 겹치지만 density만 다른 경우에는 importance weighting을 적용할 수 있다. 반면 Test-only region에는 대응되는 Train sample이 없으므로 reweighting만으로 해결할 수 없다 [[2](#ref-2)] [[3](#ref-3)].
-
 #### Model Selection under Extrapolation
 
-외삽이 필요한 문제에서는 model의 extrapolation behavior를 validation에 포함해야 한다. Linear 또는 구조가 명시된 parametric model은 가정한 functional form을 범위 밖으로 연장할 수 있지만, 이 특성이 실제 관계와 일치하는지는 별도로 검증해야 한다. 따라서 단순히 Train score가 높은 model보다 **range-separated validation에서 안정적인 model**을 선택하는 것이 중요하다.
+외삽이 필요한 문제에서는 model의 extrapolation behavior를 validation에 포함해야 한다. Linear 또는 구조가 명시된 parametric model은 가정한 functional form을 범위 밖으로 연장할 수 있지만, 이 특성이 실제 관계와 일치하는지는 별도로 검증해야 한다. 따라서 단순히 Train score가 높은 model보다 **range-separated validation에서 안정적인 model**을 선택하는 것이 중요하다.  
+
+
+#### Importance / Density-ratio Weighting
+
+Train과 Test의 support가 겹치지만 density가 다른 경우에는 Test에서 자주 나타나는 영역의 Train sample에 더 큰 weight를 줄 수 있다. 대표적으로 Train/Test를 구분하는 classifier를 학습한 뒤 그 확률을 이용하여 density ratio를 근사하거나, KLIEP, uLSIF 등의 density-ratio estimation 방법을 사용할 수 있다. 단, Test-only 영역처럼 Train sample 자체가 없는 영역은 weighting으로 해결할 수 없다.
+
+#### Robust Feature Transformation
+
+극단적인 값에 model이 지나치게 민감한 경우 clipping, winsorization, binning 등의 transformation을 적용할 수 있다.  
+예를 들어 Train에서 정의한 quantile이나 range를 기준으로 feature를 제한하면 일부 extreme value의 영향을 줄일 수 있다. 다만 이는 extrapolation을 해결하는 것이 아니라 range shift에 대한 model sensitivity를 낮추는 보조적인 방법이다.
 
 ### 4.5 Limitations
 
