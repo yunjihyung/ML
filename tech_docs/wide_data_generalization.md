@@ -1,5 +1,5 @@
 # Generalization in Wide / High-Dimensional Data
-Rev. 1 | Created: 2026-09-17 | Updated: 2026-09-17 05:20 UTC
+Rev. 1 | Created: 2026-09-17 | Updated: 2026-09-17 15:55 KST
 
 ## 1. Scope
 
