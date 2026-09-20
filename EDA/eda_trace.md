@@ -1,11 +1,11 @@
 # ULVAC x_machine Trace EDA
 
-Rev. 2 | Created: 2026-09-20 | Updated: 2026-09-20 18:47 CST
+Rev. 2 | Created: 2026-09-20 | Updated: 2026-09-20 20:47 KST
 
 ## 1. Purpose
 
-- **Problem Statement**: ULVAC machine trace에는 약 128개의 <code>x_machine_</code> feature가 존재하며, 이를 그대로 사용하면 정보가 없는 feature와 중복되거나 일시적으로만 변하는 feature까지 모두 독립적인 sensor 정보로 취급할 수 있다.
-- **Goal**: 전체 machine feature 중 실제 값의 변동이 확인된 43개 feature를 대상으로 원본 trace EDA를 수행하고, 각 feature를 제거·축약·보존할지 판단할 수 있는 근거를 수치와 그림으로 정리한다.
+- **Problem Statement**: ULVAC machine trace에는 약 128개의 `x_machine_` feature가 존재하며, 이 중 일부는 값이 변하지 않거나 서로 중복되고, 일부는 짧은 pulse나 특정 공정 구간에서만 변하는 형태를 보인다. 이러한 특성을 구분하지 않으면 각 feature의 실제 역할과 정보량을 판단하기 어렵다.
+- **Goal**: 전체 machine feature 중 실제 값의 변동이 확인된 43개 feature를 대상으로 원본 trace EDA를 수행하여, 공정 구간별 변화 형태, 반복성, 지속성, 중복 관계 및 예외 패턴을 파악하고 수치와 그림으로 정리한다.
 - **Non-Goal**: 값이 변하지 않는 단일값 feature에 대한 추가 분석과 두께 예측 model 학습 및 성능 비교는 다루지 않는다.
 
 ## 2. Summary
